@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Создание отчета - Система отчетов{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Создание отчета</h1>
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Вернуться
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        {% if error %}
+        <div class="alert alert-danger" role="alert">
+            {{ error }}
+        </div>
+        {% endif %}
+        
+        <form method="POST" action="{{ url_for('create_report') }}">
+            <div class="mb-3">
+                <label for="description" class="form-label">Описание выполненной задачи</label>
+                <textarea class="form-control" id="description" name="description" rows="4" required></textarea>
+                <div class="form-text">Опишите, что было сделано. Будьте конкретны и указывайте детали.</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="metric_name" class="form-label">Название показателя (опционально)</label>
+                <input type="text" class="form-control" id="metric_name" name="metric_name" placeholder="Например: Количество обработанных заявок">
+            </div>
+            
+            <div class="mb-3">
+                <label for="metric_value" class="form-label">Значение показателя (опционально)</label>
+                <input type="text" class="form-control" id="metric_value" name="metric_value" placeholder="Например: 42">
+                <div class="form-text">Введите числовое значение. Используйте точку или запятую для десятичных дробей.</div>
+            </div>
+            
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-lg"></i> Сохранить отчет
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Инициализация Telegram Mini App
+        const webapp = window.Telegram.WebApp;
+        webapp.expand();
+        
+        // Установка цветов в соответствии с темой Telegram
+        if (webapp.colorScheme === 'dark') {
+            document.body.classList.add('dark-theme');
+        }
+        
+        // Настройка основной кнопки Telegram при необходимости
+        webapp.MainButton.setText('Сохранить отчет');
+        webapp.MainButton.show();
+        
+        webapp.MainButton.onClick(function() {
+            // Отправить форму при нажатии на кнопку
+            document.querySelector('form').submit();
+        });
+        
+        // Настройка валидации формы
+        const form = document.querySelector('form');
+        const description = document.getElementById('description');
+        
+        description.addEventListener('input', function() {
+            if (description.value.trim()) {
+                webapp.MainButton.enable();
+            } else {
+                webapp.MainButton.disable();
+            }
+        });
+        
+        // Изначально кнопка отключена
+        webapp.MainButton.disable();
+    });
+</script>
+{% endblock %} 

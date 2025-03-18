@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Вход в систему отчетов{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body text-center">
+                <h1 class="h3 mb-4">Система отчетов сотрудников</h1>
+                <p class="mb-4">Войдите через Telegram, чтобы продолжить</p>
+                
+                <div id="telegram-login-container" class="d-flex justify-content-center mb-3">
+                    <!-- Здесь будет размещен виджет Telegram Login -->
+                </div>
+                
+                <p class="text-muted small">После входа вы сможете создавать отчеты и просматривать свои данные</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Инициализация Telegram Mini App
+        const webapp = window.Telegram.WebApp;
+        webapp.expand();
+        
+        // Если пользователь уже аутентифицирован в Telegram Mini App
+        if (webapp.initDataUnsafe && webapp.initDataUnsafe.user) {
+            const user = webapp.initDataUnsafe.user;
+            
+            // Отправка данных на сервер для аутентификации
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/auth';
+            
+            for (const key in user) {
+                if (user.hasOwnProperty(key)) {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = user[key];
+                    form.appendChild(input);
+                }
+            }
+            
+            // Добавляем хеш и дату аутентификации
+            const hashInput = document.createElement('input');
+            hashInput.type = 'hidden';
+            hashInput.name = 'hash';
+            hashInput.value = webapp.initData.split('&hash=')[1];
+            form.appendChild(hashInput);
+            
+            const authDateInput = document.createElement('input');
+            authDateInput.type = 'hidden';
+            authDateInput.name = 'auth_date';
+            authDateInput.value = Math.floor(Date.now() / 1000);
+            form.appendChild(authDateInput);
+            
+            document.body.appendChild(form);
+            form.submit();
+        } else {
+            // Отображение сообщения о необходимости открыть в Telegram
+            document.getElementById('telegram-login-container').innerHTML = `
+                <div class="alert alert-warning" role="alert">
+                    Это приложение должно быть открыто через Telegram. 
+                    Пожалуйста, воспользуйтесь ссылкой в боте.
+                </div>
+            `;
+        }
+    });
+</script>
+{% endblock %} 
