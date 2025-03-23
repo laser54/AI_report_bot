@@ -4,7 +4,8 @@ import logging
 from datetime import datetime, timedelta
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from db.models import Report, User, Team, get_session
+from db.models import Report, User, Team
+from db.database import get_session
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

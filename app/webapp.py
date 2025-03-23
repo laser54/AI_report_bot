@@ -1,15 +1,23 @@
 import sys
 import os
 import logging
+from pathlib import Path
 from flask import Flask, request, render_template, jsonify, redirect, url_for, session
 import json
 import hmac
 import hashlib
 from datetime import datetime
+from dotenv import load_dotenv
+import ssl
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Добавляем корневую директорию проекта в PYTHONPATH
+root_dir = str(Path(__file__).parent.parent)
+sys.path.append(root_dir)
+
+# После добавления пути импортируем локальные модули
+from db.database import get_session, init_db
+from db.models import User, Report
 from config.config import TELEGRAM_TOKEN, APP_HOST, APP_PORT
-from db.models import init_db
 from services.user_service import UserService
 from services.team_service import TeamService
 from services.report_service import ReportService
@@ -23,10 +31,39 @@ logger = logging.getLogger(__name__)
 
 # Инициализация Flask приложения
 app = Flask(__name__, 
-            template_folder=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates'),
-            static_folder=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static'))
+            template_folder=os.path.join(root_dir, 'templates'),
+            static_folder=os.path.join(root_dir, 'static'))
 
 app.secret_key = TELEGRAM_TOKEN  # Используем токен бота в качестве секретного ключа для сессий
+
+def create_self_signed_cert():
+    """Создание самоподписанного SSL сертификата"""
+    from OpenSSL import crypto
+    
+    # Генерация ключа
+    key = crypto.PKey()
+    key.generate_key(crypto.TYPE_RSA, 2048)
+    
+    # Создание сертификата
+    cert = crypto.X509()
+    cert.get_subject().CN = "localhost"
+    cert.set_serial_number(1000)
+    cert.gmtime_adj_notBefore(0)
+    cert.gmtime_adj_notAfter(365*24*60*60)  # Действителен 1 год
+    cert.set_issuer(cert.get_subject())
+    cert.set_pubkey(key)
+    cert.sign(key, 'sha256')
+    
+    # Сохранение сертификата и ключа
+    cert_path = os.path.join(root_dir, 'cert.pem')
+    key_path = os.path.join(root_dir, 'key.pem')
+    
+    with open(cert_path, "wb") as f:
+        f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+    with open(key_path, "wb") as f:
+        f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, key))
+        
+    return cert_path, key_path
 
 # Middleware для проверки Telegram данных
 def verify_telegram_data(data):
@@ -58,8 +95,8 @@ def verify_telegram_data(data):
 # Главная страница
 @app.route('/')
 def index():
-    """Отображение главной страницы"""
-    return render_template('index.html')
+    """Главная страница мини-приложения"""
+    return render_template('report_form.html')
 
 # Авторизация через Telegram Login Widget
 @app.route('/auth', methods=['POST'])
@@ -168,55 +205,34 @@ def dashboard():
                          reports=reports)
 
 # Создание отчета
-@app.route('/report/create', methods=['GET', 'POST'])
-def create_report():
-    """Страница создания отчета"""
-    if 'telegram_id' not in session:
-        return redirect(url_for('index'))
-    
-    user = UserService.get_user_by_telegram_id(session.get('telegram_id'))
-    
-    if not user:
-        session.clear()
-        return redirect(url_for('index'))
-    
-    if request.method == 'POST':
-        description = request.form.get('description', '').strip()
-        metric_name = request.form.get('metric_name', '').strip()
-        metric_value_str = request.form.get('metric_value', '').strip()
-        
-        if not description:
-            return render_template('create_report.html', 
-                                 user=user,
-                                 error="Описание не может быть пустым")
-        
-        metric_value = None
-        if metric_name and metric_value_str:
-            try:
-                metric_value = float(metric_value_str.replace(',', '.'))
-            except ValueError:
-                return render_template('create_report.html', 
-                                     user=user,
-                                     error="Неверный формат числового показателя")
-        
-        # Создание отчета
-        report = ReportService.create_report(
-            user_id=user.id,
-            team_id=user.team_id,
-            description=description,
-            metric_name=metric_name if metric_name else None,
-            metric_value=metric_value
-        )
-        
-        if report:
-            return redirect(url_for('dashboard'))
-        else:
-            return render_template('create_report.html', 
-                                 user=user,
-                                 error="Ошибка при создании отчета")
-    
-    # GET запрос - отображение формы создания отчета
-    return render_template('create_report.html', user=user)
+@app.route('/submit_report', methods=['POST'])
+def submit_report():
+    """Обработка отправки отчета"""
+    try:
+        with get_session() as session:
+            # Получаем данные из формы
+            description = request.form.get('description')
+            metric_name = request.form.get('metric_name')
+            metric_value = request.form.get('metric_value')
+            user_data = request.form.get('user')
+            
+            if not description:
+                return jsonify({'success': False, 'error': 'Описание обязательно'})
+                
+            # Создаем отчет
+            report = Report(
+                description=description,
+                metric_name=metric_name,
+                metric_value=float(metric_value) if metric_value else None,
+                user_id=user_data['id']
+            )
+            
+            session.add(report)
+            session.commit()
+            
+            return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 # Выход из системы
 @app.route('/logout')
@@ -248,7 +264,20 @@ def api_weekly_reports():
 
 def run_app():
     """Запуск Flask приложения"""
-    app.run(host=APP_HOST, port=APP_PORT, debug=True)
+    # Создаем SSL сертификат
+    cert_path, key_path = create_self_signed_cert()
+    
+    # Настраиваем SSL контекст
+    ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    ssl_context.load_cert_chain(cert_path, key_path)
+    
+    # Обновляем URL в конфигурации
+    public_url = f"https://localhost:{APP_PORT}"
+    os.environ['WEBAPP_URL'] = public_url
+    logger.info(f"Веб-приложение доступно по адресу: {public_url}")
+    
+    # Запускаем приложение с SSL
+    app.run(host=APP_HOST, port=APP_PORT, ssl_context=ssl_context, debug=True)
 
 if __name__ == "__main__":
     run_app() 

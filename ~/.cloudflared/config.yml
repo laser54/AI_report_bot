@@ -1,0 +1,10 @@
+tunnel: my-tunnel
+credentials-file: C:\Users\Laser\.cloudflared\439e84b6-41e0-4062-834c-43fe0df81ce5.json
+
+ingress:
+  - hostname: sguevents.help
+    path: /webhook/*
+    service: http://localhost:8443
+  - hostname: sguevents.help
+    service: http://localhost:8000
+  - service: http_status:404 

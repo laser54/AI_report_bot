@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создание отчета</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+            background-color: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #000);
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--tg-theme-hint-color, #999);
+        }
+        textarea, input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--tg-theme-hint-color, #ddd);
+            border-radius: 8px;
+            background-color: var(--tg-theme-secondary-bg-color, #f5f5f5);
+            color: var(--tg-theme-text-color, #000);
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #fff);
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .error {
+            color: #ff3b30;
+            font-size: 14px;
+            margin-top: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <form id="reportForm">
+        <div class="form-group">
+            <label for="description">Описание выполненной работы</label>
+            <textarea id="description" name="description" required></textarea>
+            <div class="error" id="descriptionError">Пожалуйста, введите описание</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="metricName">Название показателя (необязательно)</label>
+            <input type="text" id="metricName" name="metric_name">
+        </div>
+        
+        <div class="form-group">
+            <label for="metricValue">Значение показателя (необязательно)</label>
+            <input type="number" id="metricValue" name="metric_value" step="0.01">
+            <div class="error" id="metricValueError">Пожалуйста, введите корректное число</div>
+        </div>
+        
+        <button type="submit" id="submitButton">Отправить отчет</button>
+    </form>
+
+    <script>
+        // Инициализация Telegram WebApp
+        const webapp = window.Telegram.WebApp;
+        webapp.ready();
+        
+        // Настройка темы
+        if (webapp.colorScheme === 'dark') {
+            document.body.classList.add('dark');
+        }
+        
+        // Обработка отправки формы
+        document.getElementById('reportForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Сбрасываем ошибки
+            document.querySelectorAll('.error').forEach(el => el.style.display = 'none');
+            
+            // Получаем данные формы
+            const description = document.getElementById('description').value.trim();
+            const metricName = document.getElementById('metricName').value.trim();
+            const metricValue = document.getElementById('metricValue').value.trim();
+            
+            // Валидация
+            if (!description) {
+                document.getElementById('descriptionError').style.display = 'block';
+                return;
+            }
+            
+            if (metricValue && isNaN(parseFloat(metricValue))) {
+                document.getElementById('metricValueError').style.display = 'block';
+                return;
+            }
+            
+            // Отключаем кнопку на время отправки
+            const submitButton = document.getElementById('submitButton');
+            submitButton.disabled = true;
+            
+            try {
+                // Отправляем данные на сервер
+                const response = await fetch('/submit_report', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Telegram-Init-Data': webapp.initData
+                    },
+                    body: new URLSearchParams({
+                        description: description,
+                        metric_name: metricName,
+                        metric_value: metricValue,
+                        user: JSON.stringify(webapp.initDataUnsafe.user)
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Закрываем WebApp с успешным результатом
+                    webapp.close();
+                } else {
+                    throw new Error(result.error || 'Ошибка при создании отчета');
+                }
+            } catch (error) {
+                alert(error.message);
+                submitButton.disabled = false;
+            }
+        });
+        
+        // Настройка главной кнопки Telegram (если нужно)
+        webapp.MainButton.setText('Отправить отчет').show().onClick(function() {
+            document.getElementById('submitButton').click();
+        });
+    </script>
+</body>
+</html> 

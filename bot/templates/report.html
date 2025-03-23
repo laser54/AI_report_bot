@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Создание отчета</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--tg-theme-bg-color, #f5f5f5);
+            color: var(--tg-theme-text-color, #000);
+        }
+        .form-group {
+            margin-bottom: 15px;
+            background: var(--tg-theme-secondary-bg-color, white);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--tg-theme-text-color, #333);
+            font-weight: 500;
+        }
+        textarea, input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid var(--tg-theme-hint-color, #ddd);
+            border-radius: 4px;
+            box-sizing: border-box;
+            background: var(--tg-theme-bg-color, white);
+            color: var(--tg-theme-text-color, #000);
+        }
+        textarea:focus, input:focus {
+            outline: none;
+            border-color: var(--tg-theme-link-color, #2196F3);
+        }
+        button {
+            background: var(--tg-theme-button-color, #2196F3);
+            color: var(--tg-theme-button-text-color, white);
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            font-size: 14px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: 500;
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .error {
+            color: #f44336;
+            font-size: 14px;
+            margin-top: 5px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <form id="reportForm">
+        <div class="form-group">
+            <label for="description">Описание выполненной работы:</label>
+            <textarea id="description" name="description" rows="4" required></textarea>
+        </div>
+        <div class="form-group">
+            <label for="metricName">Название показателя (необязательно):</label>
+            <input type="text" id="metricName" name="metric_name">
+        </div>
+        <div class="form-group">
+            <label for="metricValue">Значение показателя:</label>
+            <input type="number" id="metricValue" name="metric_value" step="0.01">
+        </div>
+        <button type="submit" id="submitBtn">Отправить отчет</button>
+        <div id="error" class="error"></div>
+    </form>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        // Проверяем, что скрипт запущен в Telegram WebApp
+        if (!tg.initData) {
+            document.body.innerHTML = '<div class="error" style="display:block">Эта страница должна быть открыта через Telegram</div>';
+            throw new Error('Missing Telegram WebApp data');
+        }
+
+        document.getElementById('reportForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            const errorDiv = document.getElementById('error');
+            submitBtn.disabled = true;
+            errorDiv.style.display = 'none';
+            
+            try {
+                if (!tg.initDataUnsafe || !tg.initDataUnsafe.user || !tg.initDataUnsafe.user.id) {
+                    throw new Error('Не удалось получить данные пользователя');
+                }
+
+                const response = await fetch('/submit_report', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Telegram-Init-Data': tg.initData
+                    },
+                    body: JSON.stringify({
+                        description: document.getElementById('description').value,
+                        metric_name: document.getElementById('metricName').value || null,
+                        metric_value: document.getElementById('metricValue').value || null,
+                        user_id: tg.initDataUnsafe.user.id
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    tg.close();
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                errorDiv.textContent = error.message || 'Произошла ошибка при отправке отчета';
+                errorDiv.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html> 
